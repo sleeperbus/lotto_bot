@@ -15,19 +15,20 @@ dbconn = pymongo.MongoClient(
 db = dbconn['lotto']
 
 
-def insertRoundWinInfo(round, round_date, numbers, bonus_number, prize):
+def insertRoundWinInfo(info):
     """
     회차의 정보를 db에 생성한다.
     """
-    db.round_win_info.update({'round': round}, {'round_date': round_date, 'numbers': numbers, 'bonus_number': bonus_number, 'prize': prize}, upsert=True)
-    #db.round_win_info.insert_one(p_round)
+    db.round_win_info.update({'round': info['round']}, {'round': info['round'], 'round_date': info['round_date'],
+                                                        'numbers': info['numbers'], 'bonus_number': info['bonus_number'], 'prize': info['prize']}, upsert=True)
 
 
-def upsertBuyInfo(user_id, round, numbers):
+def upsertBuyInfo(info):
     """구입한 로또의 정보를 기록한다."""
-    db.buy_info.update({'user_id': user_id, 'round': round}, {'$push': {'numbers': {'$each': numbers}}}, upsert=True)
+    db.buy_info.update({'user_id': info['user_id'], 'round': info['round']}, {
+                       '$push': {'numbers': {'$each': info['numbers']}}}, upsert=True)
 
-        
+
 def getRoundBuyInfo(user_id, round):
     return db.buy_info.find_one({'user_id': user_id, 'round': round})
 

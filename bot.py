@@ -37,8 +37,7 @@ def lottoPhoto(bot, update):
             update.message.reply_text('구입회차: %s' % lotto_dict['round'])
             update.message.reply_text(
                 '\n'.join([','.join(number) for number in lotto_dict['numbers']]))
-            db.upsertBuyInfo(
-                lotto_dict['user_id'], lotto_dict['round'], lotto_dict['numbers'])
+            db.upsertBuyInfo(lotto_dict)
         else:
             update.message.reply_text('이미지에서 로또 번호를 찾을 수 없습니다.')
     else:
@@ -48,8 +47,14 @@ def strRoundWinInfo(round):
     """
     당첨결과를 텍스트로 반환한다.
     """
-    winInfo = db.getRoundWinInfo(round)
-    
+    info = db.getRoundWinInfo(round)
+    message = """
+    {}회차({})의 당첨번호는 다음과 같습니다.
+    {} + {}
+    """.format(info['round'], info['round_date'], ", ".join(info['numbers']), 
+        info['bonus_number'])
+    return message
+
 
 def getRoundInfo(bot, update, args):
     """
@@ -65,10 +70,9 @@ def getRoundInfo(bot, update, args):
         {}
         """.format(update.message.text, len(buy_info['numbers']), '\n'.join([', '.join(item) for item in buy_info['numbers']]))
         update.message.reply_text(return_message)
+        update.message.reply_text(strRoundWinInfo(round))
     except (IndexError, ValueError):
         update.message.reply_text("Usage: /round <로또회차>")
-
-
 
 
 def buyInfoFromUrl(url):
@@ -105,8 +109,7 @@ def weeklyLottoResult(bot, job):
     winInfo = scraping.getLottoResult(lotto_round)
     logger.info('winInfo: %s' % winInfo)
     message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(winInfo['round'], winInfo['numbers'])
-    db.insertRoundWinInfo(winInfo['round'], winInfo['round_date'],
-                          winInfo['numbers'], winInfo['bonus_number'], winInfo['prize'])
+    db.insertRoundWinInfo(winInfo)
     bot.send_message(job.context, message)
 
 
@@ -142,7 +145,7 @@ def main():
 
     # 배치 잡
     j = updater.job_queue
-    job_weekly = j.run_daily(weeklyLottoResult, datetime.time(20, 55), days=(6,), context=config['SUPERUSER'])
+    job_weekly = j.run_daily(weeklyLottoResult, datetime.time(20, 55), days=(6,), context=config['TELEGRAM']['SUPERUSER'])
     # job_weekly = j.run_once(weeklyLottoResult, 5, context=1)
 
     # idling
