@@ -43,17 +43,23 @@ def lottoPhoto(bot, update):
     else:
         update.message.reply_text('이미지에서 웹주소가 포함된 바코드를 찾을 수 없습니다.')
 
-def strRoundWinInfo(round):
+
+def strRoundWinInfo(info):
     """
     당첨결과를 텍스트로 반환한다.
     """
-    info = db.getRoundWinInfo(round)
     message = """
     {}회차({})의 당첨번호는 다음과 같습니다.
     {} + {}
-    """.format(info['round'], info['round_date'], ", ".join(info['numbers']), 
-        info['bonus_number'])
+    """.format(info['round'], info['round_date'], ", ".join(info['numbers']),
+               info['bonus_number'])
     return message
+
+
+def strBuyInfo(info):
+    return "{}회차에는 {}건의 구매정보가 있습니다.\n{}".format(info['round'],
+                                                len(info['numbers']),
+                                                '\n'.join([', '.join(item) for item in info['numbers']]))
 
 
 def getRoundInfo(bot, update, args):
@@ -64,13 +70,13 @@ def getRoundInfo(bot, update, args):
     try:
         round = int(args[0])
         buy_info = db.getRoundBuyInfo(update.message.chat_id, round)
-        # logger.info('buy round info: %s', buy_info)
-        return_message = """
-        {}회차에는 {}건의 구매정보가 있습니다.
-        {}
-        """.format(update.message.text, len(buy_info['numbers']), '\n'.join([', '.join(item) for item in buy_info['numbers']]))
-        update.message.reply_text(return_message)
-        update.message.reply_text(strRoundWinInfo(round))
+        win_info = db.getRoundWinInfo(round)
+
+        update.message.reply_text(strRoundWinInfo(win_info))
+        update.message.reply_text(strWinResult(
+            win_info['numbers'], win_info['bonus_number'], buy_info['numbers'], win_info['prize']))
+        update.message.reply_text(strBuyInfo(buy_info))
+
     except (IndexError, ValueError):
         update.message.reply_text("Usage: /round <로또회차>")
 
@@ -101,6 +107,37 @@ def buyInfoFromUrl(url):
     return {'round': round, 'numbers': purchase_numbers}
 
 
+def strWinResult(win_numbers, win_bonus_number, buy_numbers, prize):
+    """
+    당첨번호와 구입한 복권의 번호를 비교해서 당첨 정보를 반환한다.
+    (등수,맞은 번호)의 리스트를 반환한다. 
+    """
+    # right_numbers = [list(filter(lamba x: x in win_numbers, buy_number)) for buy_number in buy_numbers]
+    right_numbers = zip(buy_numbers, [
+                        [number for number in numbers if number in win_numbers] for numbers in buy_numbers])
+    result = []
+    for i, match_numbers in enumerate(right_numbers):
+        if len(match_numbers[1]) == 6:
+            result.append("1등!! 상금 {}원, {}".format(
+                prize[str(1)][1], ", ".join(match_numbers[1])))
+        elif len(match_numbers[1]) == 5:
+            if win_bonus_number in match_numbers[0]:
+                result.append(
+                    "2등!! 상금 {}원, {}+{}".format(prize[str(2)][1], ", ".join(match_numbers[1]), win_bonus_number))
+            else:
+                result.append((3, match_numbers[1]))
+                result.append("3등!! 상금 {}원, {}".format(
+                    prize[str(3)][1], ", ".join(match_numbers[1])))
+        elif len(match_numbers[1]) == 4:
+            result.append("4등!! 상금 {}원, {}".format(
+                prize[str(4)][1], ", ".join(match_numbers[1])))
+        elif len(match_numbers[1]) == 3:
+            result.append("5등!! 상금 {}원, {}".format(
+                prize[str(4)][1], ", ".join(match_numbers[1])))
+
+    return '\n'.join(result) if result else '아쉽게도 이번에는 당첨내용이 없습니다.'
+
+
 def weeklyLottoResult(bot, job):
     """
     해당 회차의 당첨 정보를 가져와서 DB 에 생성한다.
@@ -108,7 +145,8 @@ def weeklyLottoResult(bot, job):
     (lotto_round, lotto_date) = scraping.nearestLottoDate(datetime.datetime.now())
     winInfo = scraping.getLottoResult(lotto_round)
     logger.info('winInfo: %s' % winInfo)
-    message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(winInfo['round'], winInfo['numbers'])
+    message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(
+        winInfo['round'], winInfo['numbers'])
     db.insertRoundWinInfo(winInfo)
     bot.send_message(job.context, message)
 
@@ -145,7 +183,8 @@ def main():
 
     # 배치 잡
     j = updater.job_queue
-    job_weekly = j.run_daily(weeklyLottoResult, datetime.time(20, 55), days=(6,), context=config['TELEGRAM']['SUPERUSER'])
+    job_weekly = j.run_daily(weeklyLottoResult, datetime.time(
+        20, 55), days=(6,), context=config['TELEGRAM']['SUPERUSER'])
     # job_weekly = j.run_once(weeklyLottoResult, 5, context=1)
 
     # idling
