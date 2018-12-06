@@ -19,25 +19,31 @@ QR_FOLDER_PATH = 'QR_PHOTO_DOWNLOAD'
 def lottoPhoto(bot, update):
     """
     사용자가 업로드한 이미지에서 바코드를 찾는다.
+    836회부터 웹주소가 바뀌었다.
     """
     user = update.message.from_user
     photo_file = bot.get_file(update.message.photo[-1].file_id)
-    dl_file_name = "{}/{}_{}".format(QR_FOLDER_PATH,
-                                     user.id, photo_file.file_id)
+    dl_file_name = "{}/{}_{}".format(QR_FOLDER_PATH, user.id, photo_file.file_id)
     photo_file.download(dl_file_name)
     logger.info('photo of %s: %s', user.id, dl_file_name)
 
     barcodes = extractBarcodes(dl_file_name)
-    barcodes = [barcode for barcode in barcodes if barcode.startswith(
-        r'http://qr.645lotto.net')]
+    barcodes = [barcode for barcode in barcodes 
+        if (barcode.startswith(r'http://qr.645lotto.net') or barcode.startswith(r'http://m.dhlottery.co.kr')) ]
     if barcodes:
-        lotto_dict = buyInfoFromUrl(barcodes[0])
-        lotto_dict['user_id'] = user.id
-        if lotto_dict:
-            update.message.reply_text('구입회차: %s' % lotto_dict['round'])
-            update.message.reply_text(
-                '\n'.join([','.join(number) for number in lotto_dict['numbers']]))
-            db.upsertBuyInfo(lotto_dict)
+        # 사진 하나에는 하나의 제품 바코드만 있다.
+        buyInfo = buyInfoFromUrl(barcodes[0])
+        buyInfo['user_id'] = user.id
+        logger.info('new lotto: %s', buyInfo)
+        if buyInfo:
+            update.message.reply_text(strBuyInfo(buyInfo))
+            db.upsertBuyInfo(buyInfo)
+            winInfo = db.getRoundWinInfo(buyInfo['round'])
+            if winInfo:
+                update.message.reply_text(strRoundWinInfo(winInfo))
+                update.message.reply_text(strWinResult(winInfo['numbers'], winInfo['bonus_number'], buyInfo, winInfo['prize']))
+            else:
+                update.message.reply_text("{}회차의 당첨 정보가 없습니다. 곧 알려드리겠습니다.".format(buyInfo['round']))
         else:
             update.message.reply_text('이미지에서 로또 번호를 찾을 수 없습니다.')
     else:
@@ -60,6 +66,37 @@ def strBuyInfo(info):
     return "{}회차에는 {}건의 구매정보가 있습니다.\n{}".format(info['round'],
                                                 len(info['numbers']),
                                                 '\n'.join([', '.join(item) for item in info['numbers']]))
+
+
+def strWinResult(win_numbers, win_bonus_number, buy_numbers, prize):
+    """
+    당첨번호와 구입한 복권의 번호를 비교해서 당첨 정보를 반환한다.
+    (등수,맞은 번호)의 리스트를 반환한다. 
+    """
+    # right_numbers = [list(filter(lamba x: x in win_numbers, buy_number)) for buy_number in buy_numbers]
+    right_numbers = zip(buy_numbers, [
+                        [number for number in numbers if number in win_numbers] for numbers in buy_numbers])
+    result = []
+    for i, match_numbers in enumerate(right_numbers):
+        if len(match_numbers[1]) == 6:
+            result.append("1등!! 상금 {:,}원, {}".format(
+                prize[str(1)][1], ", ".join(match_numbers[1])))
+        elif len(match_numbers[1]) == 5:
+            if win_bonus_number in match_numbers[0]:
+                result.append(
+                    "2등!! 상금 {:,}원, {}+{}".format(prize[str(2)][1], ", ".join(match_numbers[1]), win_bonus_number))
+            else:
+                result.append((3, match_numbers[1]))
+                result.append("3등!! 상금 {:,}원, {}".format(
+                    prize[str(3)][1], ", ".join(match_numbers[1])))
+        elif len(match_numbers[1]) == 4:
+            result.append("4등!! 상금 {:,}원, {}".format(
+                prize[str(4)][1], ", ".join(match_numbers[1])))
+        elif len(match_numbers[1]) == 3:
+            result.append("5등!! 상금 {:,}원, {}".format(
+                prize[str(4)][1], ", ".join(match_numbers[1])))
+
+    return '\n'.join(result) if result else '아쉽게도 이번에는 당첨내용이 없습니다.'
 
 
 def getRoundInfo(bot, update, args):
@@ -107,35 +144,6 @@ def buyInfoFromUrl(url):
     return {'round': round, 'numbers': purchase_numbers}
 
 
-def strWinResult(win_numbers, win_bonus_number, buy_numbers, prize):
-    """
-    당첨번호와 구입한 복권의 번호를 비교해서 당첨 정보를 반환한다.
-    (등수,맞은 번호)의 리스트를 반환한다. 
-    """
-    # right_numbers = [list(filter(lamba x: x in win_numbers, buy_number)) for buy_number in buy_numbers]
-    right_numbers = zip(buy_numbers, [
-                        [number for number in numbers if number in win_numbers] for numbers in buy_numbers])
-    result = []
-    for i, match_numbers in enumerate(right_numbers):
-        if len(match_numbers[1]) == 6:
-            result.append("1등!! 상금 {}원, {}".format(
-                prize[str(1)][1], ", ".join(match_numbers[1])))
-        elif len(match_numbers[1]) == 5:
-            if win_bonus_number in match_numbers[0]:
-                result.append(
-                    "2등!! 상금 {}원, {}+{}".format(prize[str(2)][1], ", ".join(match_numbers[1]), win_bonus_number))
-            else:
-                result.append((3, match_numbers[1]))
-                result.append("3등!! 상금 {}원, {}".format(
-                    prize[str(3)][1], ", ".join(match_numbers[1])))
-        elif len(match_numbers[1]) == 4:
-            result.append("4등!! 상금 {}원, {}".format(
-                prize[str(4)][1], ", ".join(match_numbers[1])))
-        elif len(match_numbers[1]) == 3:
-            result.append("5등!! 상금 {}원, {}".format(
-                prize[str(4)][1], ", ".join(match_numbers[1])))
-
-    return '\n'.join(result) if result else '아쉽게도 이번에는 당첨내용이 없습니다.'
 
 
 def weeklyLottoResult(bot, job):
