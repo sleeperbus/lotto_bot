@@ -39,33 +39,25 @@ def getLottoResult(round):
     bsObj = BeautifulSoup(html.read(), "html.parser", from_encoding='euc-kr')
 
     # 당첨 숫자를 추출한다. 마지막 숫자는 보너스 숫자이다.
-    # images = bsObj.find_all("img", {"src": re.compile(".*ball_[0-9]{1,2}\.png")})
-    # for image in images:
-    #     numbers.append(image['alt'].rjust(2, '0'))
-    images = bsObj.find_all("span", {"class":"ball_645"})
-    for image in images:
-        numbers.append(image.get_text().rjust(2, '0'))
-    bonus_number = numbers.pop()
+    try: 
+        images = bsObj.find_all("span", {"class": "ball_645"})
+        for image in images:
+            numbers.append(image.get_text().rjust(2, '0'))
+        bonus_number = numbers.pop()
 
-    # 당첨금액과 인원을 가져온다.
-    payout_table = bsObj.find("table", {"class": "tbl_data"}).find("tbody")
-    for item in payout_table.find_all("tr"):
-        td_tags = item.find_all("td")
-        person.append(int(td_tags[2].get_text().replace(",","")))
-        payout.append(int(td_tags[3].get_text().replace(",","").replace("원","")))
-    prize = dict(zip(map(str, range(1, len(person) + 1)), zip(person, payout)))
+        # 당첨금액과 인원을 가져온다.
+        payout_table = bsObj.find("table", {"class": "tbl_data"}).find("tbody")
+        for item in payout_table.find_all("tr"):
+            td_tags = item.find_all("td")
+            person.append(int(td_tags[2].get_text().replace(",", "")))
+            payout.append(
+                int(td_tags[3].get_text().replace(",", "").replace("원", "")))
+        prize = dict(zip(map(str, range(1, len(person) + 1)), zip(person, payout)))
 
-
-    # payout_table = bsObj.find('table', {'class': 'tblType1'}).find('tbody')
-    # for item in payout_table.find_all('tr')[1:-1]:
-    #     data = item.find_all('td', {'class': 'rt', 'device': None})
-    #     person.append(int(data[0].get_text().replace(',', '')))
-    #     payout.append(
-    #         int(data[1].get_text().replace(',', '').replace('원', '')))
-    # prize = dict(zip(map(str, range(1, len(person) + 1)), zip(person, payout)))
-
-    return {'round': round, 'round_date': round_date, 'numbers': numbers,
-            'bonus_number': bonus_number, 'prize': prize}
+        return {'round': round, 'round_date': round_date, 'numbers': numbers,
+                'bonus_number': bonus_number, 'prize': prize}
+    except (ValueError):
+        return None
 
 
 if __name__ == '__main__':

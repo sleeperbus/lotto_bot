@@ -30,7 +30,12 @@ def upsertBuyInfo(info):
 
 
 def getRoundBuyInfo(user_id, round):
+    """해당 유저의 구입 정보를 반환한다."""
     return db.buy_info.find_one({'user_id': user_id, 'round': round})
+
+        
+def getAllRoundBuyInfo(round):
+    return db.buy_info.find({'round': round})
 
 
 def getRoundWinInfo(round):
