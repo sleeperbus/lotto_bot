@@ -10,7 +10,8 @@ import scraping_lotto as scraping
 import datetime
 import time
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 QR_FOLDER_PATH = 'QR_PHOTO_DOWNLOAD'
@@ -42,7 +43,7 @@ def lottoPhoto(bot, update):
             winInfo = db.getRoundWinInfo(buyInfo['round'])
             if winInfo:
                 update.message.reply_text(strRoundWinInfo(winInfo))
-                update.message.reply_text(strWinResult(buyInfo, winInfo))
+                update.message.reply_text(strMyWinResult(buyInfo, winInfo))
             else:
                 update.message.reply_text(
                     "{}회차의 당첨 정보가 없습니다. 곧 알려드리겠습니다.".format(buyInfo['round']))
@@ -52,22 +53,24 @@ def lottoPhoto(bot, update):
         update.message.reply_text('이미지에서 웹주소가 포함된 바코드를 찾을 수 없습니다.')
 
 
-def strRoundWinInfo(info):
-    """
-    당첨결과를 텍스트로 반환한다.
-    """
-    message = "{}회차({})의 당첨번호는 다음과 같습니다.\n{} + {} ".format(info['round'],
-                                                           info['round_date'], ", ".join(info['numbers']), info['bonus_number'])
-    return message
-
-
 def strBuyInfo(info):
     return "{}회차에는 {}건의 구매정보가 있습니다.\n{}".format(info['round'],
                                                 len(info['numbers']),
                                                 '\n'.join([', '.join(item) for item in info['numbers']]))
 
 
-def strWinResult(buyInfo, winInfo):
+def strRoundWinInfo(winInfo):
+    """해당 라운드의 로또 결과를 출력한다."""
+    win_numbers = winInfo['numbers']
+    win_bonus_number = winInfo['bonus_number']
+    prize = winInfo['prize']
+    message = "당첨번호: {} + {}\n{}".format(
+        ",".join(win_numbers), win_bonus_number,
+        "\n".join(["{}등: {:,}원".format(i, prize[str(i)][1]) for i in range(1, 6)]))
+    return message
+
+
+def strMyWinResult(buyInfo, winInfo):
     """
     당첨번호와 구입한 복권의 번호를 비교해서 당첨 정보를 반환한다.
     (등수,맞은 번호)의 리스트를 반환한다. 
@@ -112,12 +115,12 @@ def getRoundInfo(bot, update, args):
         buy_info = db.getRoundBuyInfo(update.message.chat_id, round)
         win_info = db.getRoundWinInfo(round)
 
+        if buy_info:
+            update.message.reply_text(strBuyInfo(buy_info))
         if win_info:
             update.message.reply_text(strRoundWinInfo(win_info))
         if win_info and buy_info:
-            update.message.reply_text(strWinResult(buy_info, win_info))
-        if buy_info:
-            update.message.reply_text(strBuyInfo(buy_info))
+            update.message.reply_text(strMyWinResult(buy_info, win_info))
 
     except (IndexError, ValueError):
         update.message.reply_text("Usage: /round <로또회차>")
@@ -167,8 +170,10 @@ def sendWinInfoToAllUsers(bot, round, winInfo):
     # 아직 당첨 정보가 들어오지 않았다면 대기한다.
     msgWinInfo = strRoundWinInfo(winInfo)
     for buyInfo in allBuyInfo:
-        msgUserWinInfo = strWinResult(buyInfo, winInfo)
-        bot.send_message(buyInfo['user_id'], "\n".join([msgWinInfo, msgUserWinInfo]))
+        msgUserWinInfo = strMyWinResult(buyInfo, winInfo)
+        msgBuyInfo = strBuyInfo(buyInfo)
+        bot.send_message(buyInfo['user_id'], "\n".join(
+            [msgBuyInfo, msgWinInfo, msgUserWinInfo]))
 
 
 def error(bot, update, error):
@@ -187,7 +192,8 @@ def weeklyLottoResult(bot, job):
         time.sleep(20)
         win_info = scraping.getLottoResult(lotto_round)
     logger.info('win_info: %s' % win_info)
-    message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(win_info['round'], win_info['numbers'])
+    message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(
+        win_info['round'], win_info['numbers'])
     db.insertRoundWinInfo(win_info)
     bot.send_message(job.context, message)
 
@@ -211,7 +217,14 @@ def weeklySendWinInfo(bot, job):
     s_time = datetime.datetime.now()
     sendWinInfoToAllUsers(bot, lotto_round, winInfo)
     e_time = datetime.datetime.now()
-    bot.send_message(job.context, "당첨정보를 보내는데 {:,}초 걸렸습니다.".format((e_time - s_time).seconds))
+    bot.send_message(job.context, "당첨정보를 보내는데 {:,}초 걸렸습니다.".format(
+        (e_time - s_time).seconds))
+
+
+def dailyUrlCheck(bot, job):
+    """로또 사이트에서 결과를 가져올 수 있는지 확인한다."""
+    if not scraping.getLottoResult(1):
+        bot.send_message(job.context, "daily: 로또 사이트에서 당첨 결과를 가져올 수 없습니다.")
 
 
 def main():
@@ -223,20 +236,21 @@ def main():
     updater = Updater(config['TELEGRAM']['TOKEN'])
     dp = updater.dispatcher
     dp.add_handler(MessageHandler(Filters.photo, lottoPhoto))
-    # dp.add_handler(MessageHandler(Filters.text, getRoundInfo))
     dp.add_handler(CommandHandler('round', getRoundInfo, pass_args=True))
     dp.add_error_handler(error)
 
     # 배치 잡
     j = updater.job_queue
-    j.run_daily(weeklyLottoResult, datetime.time(20, 55), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
-    j.run_daily(weeklySendWinInfo, datetime.time(21, 00), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
-    # j.run_daily(weeklySendWinInfo, datetime.time(19, 00), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
-
+    j.run_daily(weeklyLottoResult, datetime.time(20, 55),
+                days=(5,), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklySendWinInfo, datetime.time(21, 00),
+                days=(5,), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(dailyUrlCheck, datetime.time(8, 30), context=config['TELEGRAM']['SUPERUSER'])
 
     # 봇 시작
     updater.start_polling()
     updater.idle()
+
 
 if __name__ == '__main__':
     main()
