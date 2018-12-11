@@ -9,6 +9,7 @@ import lotto_db as db
 import scraping_lotto as scraping
 import datetime
 import time
+import os
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -52,6 +53,9 @@ def lottoPhoto(bot, update):
     else:
         update.message.reply_text('이미지에서 웹주소가 포함된 바코드를 찾을 수 없습니다.')
 
+    # 사진은 바로 삭제한다.
+    os.unlink(dl_file_name)
+    
 
 def strBuyInfo(info):
     return "{}회차에는 {}건의 구매정보가 있습니다.\n{}".format(info['round'],
