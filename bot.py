@@ -229,6 +229,14 @@ def dailyUrlCheck(bot, job):
     """로또 사이트에서 결과를 가져올 수 있는지 확인한다."""
     if not scraping.getLottoResult(1):
         bot.send_message(job.context, "daily: 로또 사이트에서 당첨 결과를 가져올 수 없습니다.")
+        
+def weeklyCheerupBuyLotto(bot, job):
+    """로또를 구매하지 않은 사람에게 구매를 격려한다."""
+    (lotto_round, lotto_date) = scraping.nearestLottoDate(datetime.datetime.now())
+    users = db.getUsersNotBuyRound(lotto_round)
+    for user in users:
+        bot.send_message(user['user_id'], "{0}회차 로또를 아직 구입하지 않았네요. 이번에는 잘 될지도 모르잖아요...".format(lotto_round))
+    bot.send_message(job.context, "독려 메세지 전송을 완료했습니다.")
 
 
 def main():
@@ -250,6 +258,8 @@ def main():
     j.run_daily(weeklySendWinInfo, datetime.time(21, 00),
                 days=(5,), context=config['TELEGRAM']['SUPERUSER'])
     j.run_daily(dailyUrlCheck, datetime.time(8, 30), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklyCheerupBuyLotto, datetime.time(18,00), days=(4,), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklyCheerupBuyLotto, datetime.time(16,00), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
 
     # 봇 시작
     updater.start_polling()
