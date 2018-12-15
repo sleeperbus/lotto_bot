@@ -171,7 +171,6 @@ def extractBarcodes(file):
 def sendWinInfoToAllUsers(bot, round, winInfo):
     """해당 회차를 구입한 모든 사람들에게 당첨 정보를 보낸다."""
     allBuyInfo = db.getAllRoundBuyInfo(round)
-    # 아직 당첨 정보가 들어오지 않았다면 대기한다.
     msgWinInfo = strRoundWinInfo(winInfo)
     for buyInfo in allBuyInfo:
         msgUserWinInfo = strMyWinResult(buyInfo, winInfo)
@@ -186,15 +185,16 @@ def error(bot, update, error):
 
 
 def weeklyLottoResult(bot, job):
-    """
-    해당 회차의 당첨 정보를 가져와서 DB 에 생성한다.
-    """
+    """해당 회차의 당첨 정보를 가져와서 DB 에 생성한다."""
     (lotto_round, lotto_date) = scraping.nearestLottoDate(datetime.datetime.now())
     win_info = scraping.getLottoResult(lotto_round)
     # 당첨 결과를 가지고 오기를 계속 시도한다.
     while not win_info:
         time.sleep(20)
         win_info = scraping.getLottoResult(lotto_round)
+        # 당첨 금액에 1등 금액이 0이면 아직 정산이 되지 않은 것이므로 대기해야 한다.
+        if win_info['prize']['1'](1) == 0:
+            win_info = 0
     logger.info('win_info: %s' % win_info)
     message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(
         win_info['round'], win_info['numbers'])
@@ -229,7 +229,8 @@ def dailyUrlCheck(bot, job):
     """로또 사이트에서 결과를 가져올 수 있는지 확인한다."""
     if not scraping.getLottoResult(1):
         bot.send_message(job.context, "daily: 로또 사이트에서 당첨 결과를 가져올 수 없습니다.")
-        
+
+
 def weeklyCheerupBuyLotto(bot, job):
     """로또를 구매하지 않은 사람에게 구매를 격려한다."""
     (lotto_round, lotto_date) = scraping.nearestLottoDate(datetime.datetime.now())
@@ -253,13 +254,11 @@ def main():
 
     # 배치 잡
     j = updater.job_queue
-    j.run_daily(weeklyLottoResult, datetime.time(20, 55),
-                days=(5,), context=config['TELEGRAM']['SUPERUSER'])
-    j.run_daily(weeklySendWinInfo, datetime.time(21, 00),
-                days=(5,), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklyLottoResult, datetime.time(21, 0), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklySendWinInfo, datetime.time(21, 5), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
     j.run_daily(dailyUrlCheck, datetime.time(8, 30), context=config['TELEGRAM']['SUPERUSER'])
-    j.run_daily(weeklyCheerupBuyLotto, datetime.time(18,00), days=(4,), context=config['TELEGRAM']['SUPERUSER'])
-    j.run_daily(weeklyCheerupBuyLotto, datetime.time(16,00), days=(5,), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklyCheerupBuyLotto, datetime.time(18, 0), days=(4, ), context=config['TELEGRAM']['SUPERUSER'])
+    j.run_daily(weeklyCheerupBuyLotto, datetime.time(16, 0), days=(5, ), context=config['TELEGRAM']['SUPERUSER'])
 
     # 봇 시작
     updater.start_polling()
