@@ -68,7 +68,8 @@ def strRoundWinInfo(winInfo):
     win_numbers = winInfo['numbers']
     win_bonus_number = winInfo['bonus_number']
     prize = winInfo['prize']
-    message = "당첨번호: {} + {}\n{}".format(
+    message = "{}회 당첨번호: {} + {}\n{}".format(
+        winInfo['round'],
         ",".join(win_numbers), win_bonus_number,
         "\n".join(["{}등: {:,}원".format(i, prize[str(i)][1]) for i in range(1, 6)]))
     return message
@@ -113,9 +114,18 @@ def getRoundInfo(bot, update, args):
     """
     사용자가 구입한 로또 정보를 보여준다.
     당첨 결과가 있다면 그것도 가져온다.
+    명렁어만 입력하면 최근 로또 결과를 보여준다.
     """
     try:
         round = int(args[0])
+    except (IndexError, ValueError):
+        update.message.reply_text("Usage: /round <로또회차>")
+        (lotto_round, lotto_date) = scraping.nearestLottoDate(datetime.datetime.now())
+        if lotto_date.date() == datetime.datetime.now().date() and db.getRoundWinInfo(lotto_round):
+            round = lotto_round 
+        else:
+            round = lotto_round - 1
+    finally:
         buy_info = db.getRoundBuyInfo(update.message.chat_id, round)
         win_info = db.getRoundWinInfo(round)
 
@@ -125,9 +135,6 @@ def getRoundInfo(bot, update, args):
             update.message.reply_text(strRoundWinInfo(win_info))
         if win_info and buy_info:
             update.message.reply_text(strMyWinResult(buy_info, win_info))
-
-    except (IndexError, ValueError):
-        update.message.reply_text("Usage: /round <로또회차>")
 
 
 def buyInfoFromUrl(url):
