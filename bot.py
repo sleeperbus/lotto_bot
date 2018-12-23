@@ -200,7 +200,7 @@ def weeklyLottoResult(bot, job):
         time.sleep(20)
         win_info = scraping.getLottoResult(lotto_round)
         # 당첨 금액에 1등 금액이 0이면 아직 정산이 되지 않은 것이므로 대기해야 한다.
-        if win_info['prize']['1'](1) == 0:
+        if win_info['prize']['1'][1] == 0:
             win_info = 0
     logger.info('win_info: %s' % win_info)
     message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(
