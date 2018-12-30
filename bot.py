@@ -194,14 +194,14 @@ def error(bot, update, error):
 def weeklyLottoResult(bot, job):
     """해당 회차의 당첨 정보를 가져와서 DB 에 생성한다."""
     (lotto_round, lotto_date) = scraping.nearestLottoDate(datetime.datetime.now())
-    win_info = scraping.getLottoResult(lotto_round)
+    win_info = None
     # 당첨 결과를 가지고 오기를 계속 시도한다.
     while not win_info:
         time.sleep(20)
         win_info = scraping.getLottoResult(lotto_round)
         # 당첨 금액에 1등 금액이 0이면 아직 정산이 되지 않은 것이므로 대기해야 한다.
         if win_info['prize']['1'][1] == 0:
-            win_info = 0
+            win_info = None
     logger.info('win_info: %s' % win_info)
     message = "{}회의 당첨번호는 다음과 같습니다.\n{}".format(
         win_info['round'], win_info['numbers'])
